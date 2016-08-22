@@ -1,6 +1,13 @@
 import json
 import time
 
+try:
+    # For Python 3.0 and later
+    from urllib.request import urlopen
+except ImportError:
+    # Fall back to Python 2's urllib2
+    from urllib2 import urlopen
+
 from django.conf import settings
 from django.contrib.staticfiles.storage import staticfiles_storage
 
@@ -30,12 +37,31 @@ class WebpackLoader(object):
                 'the file and the path is correct?'.format(
                     self.config['STATS_FILE']))
 
+    def _load_assets_url(self):
+        try:
+            response = urlopen(self.config['STATS_URL'])
+            stats_data = response.read().decode('utf-8')
+            return json.loads(stats_data)
+        except URLError as e:
+            if hasattr(e, 'reason'):
+                url_error = 'Reason: ' + e.reason
+            elif hasattr(e, 'code'):
+                url_error = 'Error code: ' + e.code
+            raise URLError(
+                'Error reading config from {0}. Are you sure the webpack '
+                'server is running and the path is correct?'.format(
+                    self.config['STATS_URL'],
+                    url_error if url_error is not None else ''))
+
     def get_assets(self):
         if self.config['CACHE']:
             if self.name not in self._assets:
                 self._assets[self.name] = self._load_assets()
             return self._assets[self.name]
-        return self._load_assets()
+        if 'STATS_URL' in self.config:
+            return self._load_assets_url()
+        else:
+            return self._load_assets()
 
     def filter_chunks(self, chunks):
         for chunk in chunks:
